@@ -24,12 +24,11 @@ import os
 import xbmc
 import xbmcaddon
 import xbmcgui
+import xbmcvfs
 import sys
-import string
 import shutil
 import time
 import traceback
-import fileinput
 import ast
 import json
 
@@ -39,11 +38,13 @@ __addonid__      = __addon__.getAddonInfo('id')
 __setting__      = __addon__.getSetting
 dialog           = xbmcgui.Dialog()
 scriptPath       = __addon__.getAddonInfo('path')
-addon_path       = xbmc.translatePath('special://home/addons')
+addon_path       = xbmcvfs.translatePath('special://home/addons')
 keep_logs        = True if __setting__('logging') == 'true' else False
 filterYN         = True if __setting__('filterYN') == 'true' else False
 populate_by_d    = __setting__('populate_by_d')
 default_playlist = __setting__('file')
+select_pl        = __setting__('select_pl')
+
 
 start_time       = time.time()
 base_time        = time.time()
@@ -56,8 +57,7 @@ except:
 	spec_shows = []
 
 def lang(id):
-	san = __addon__.getLocalizedString(id).encode( 'utf-8', 'ignore' )
-	return san 
+	return __addon__.getLocalizedString(id)
 
 def log(message, label = '', reset = False):
 	if keep_logs:
@@ -68,17 +68,13 @@ def log(message, label = '', reset = False):
 		start_time   = new_time
 		total_gap    = "%5f" % (new_time - base_time)
 		logmsg       = '%s : %s :: %s ::: %s - %s ' % ('LazyTV episode_exporter', total_gap, gap_time, label, message)
-		xbmc.log(msg = logmsg)
-		base_time    = start_time if reset else base_time
+		xbmc.log(msg=logmsg, level=xbmc.LOGINFO)
 
 
 def json_query(query, ret):
 	try:
 		xbmc_request = json.dumps(query)
 		result = xbmc.executeJSONRPC(xbmc_request)
-		#print result
-		#result = unicode(result, 'utf-8', errors='ignore')
-		#log('result = ' + str(result))
 		if ret:
 			return json.loads(result)['result']
 		else:
@@ -161,14 +157,13 @@ def convert_pl_to_showlist(pop):
 	if 'files' not in playlist_contents:
 		sys.exit()
 	else:
-		if not playlist_contents['files']:
+		if not playlist_contents.get('files'):
 			sys.exit()
 		else:
-			for x in playlist_contents['files']:
-				filtered_showids = [x['id'] for x in playlist_contents['files'] if x['type'] == 'tvshow']
-				log(filtered_showids, 'showids in playlist')
-				if not filtered_showids:
-					sys.exit()
+			filtered_showids = [x['id'] for x in playlist_contents['files'] if x.get('type') == 'tvshow']
+			log(str(filtered_showids), 'showids in playlist')
+			if not filtered_showids:
+				sys.exit()
 
 	#returns the list of all and filtered shows and episodes
 	return filtered_showids
@@ -181,9 +176,7 @@ def get_TVshows():
 	#get the most recent info on inProgress TV shows, cross-check it with what is currently stored
 	query          = '{"jsonrpc": "2.0","method": "VideoLibrary.GetTVShows","params": {"filter": {"field": "playcount", "operator": "is", "value": "0" },"properties": ["lastplayed"], "sort": {"order": "descending", "method": "lastplayed"} },"id": "1" }'
 
-	nepl_retrieved = xbmc.executeJSONRPC(query)
-	nepl_retrieved = unicode(nepl_retrieved, 'utf-8', errors='ignore')
-	nepl_retrieved = json.loads(nepl_retrieved)
+	nepl_retrieved = json.loads(xbmc.executeJSONRPC(query))
 
 	log('get_TVshows_querycomplete')
 
@@ -204,7 +197,7 @@ def get_TVshows():
 
 	nepl = [x['tvshowid'] for x in nepl_retrieved if x['tvshowid'] in nepl_stored]
 
-	stored_file_data = [[WINDOW.getProperty("LazyTV.%s.File"  % x),x] for x in nepl]
+	stored_file_data = [[WINDOW.getProperty(f"LazyTV.{x}.File"),x] for x in nepl]
 
 	log('get_TVshows_End')
 
@@ -215,27 +208,29 @@ def Main():
 
 	# open location selection window
 	location = dialog.browse(3,lang(32180),'files')
+	if not location:
+		return
 
 	log("export location: " + str(location))
 
 	# get file of selected shows
 	file_list = get_files()
+	if not file_list:
+		dialog.ok('LazyTV', 'No files to export.')
+		return
 
-
-	# load list as normal, but on click, each show is copied over (and remains highlighted)
-	# the top option is to export all
 
 	dProgress = xbmcgui.DialogProgress()
 	dProgress.create('LazyTV', lang(32183))
 
 	sizes = []
-	running_size = 0
-	log(file_list)
 	for f in file_list:
 		try:
-			sizes.append(os.path.getsize(f))
+			sizes.append(xbmcvfs.Stat(f).st_size())
 		except:
 			sizes.append(0)
+	total_size = float(sum(sizes))
+	running_size = 0
 
 	failures = []
 
@@ -243,54 +238,38 @@ def Main():
 
 		if (dProgress.iscanceled()): 
 			log('user aborted')
-			sys.exit()
+			break
 
-		prog = running_size / float(sum(sizes))
-
+		prog = (running_size / total_size) * 100 if total_size > 0 else 0
 		fn = os.path.basename(video_file)
-
-		dProgress.update(int(prog * 100.0), lang(32184),str(fn))
-
-		if i > 10:
-			log('contined')
-
-			running_size += sizes[i]
-
-			continue
+		dProgress.update(int(prog), lang(32184), str(fn))
 
 		try:
-			if not os.path.isfile(os.path.join(location, fn)):
-				shutil.copyfile(video_file, os.path.join(location, fn))
+			dest_file = os.path.join(location, fn)
+			if not xbmcvfs.exists(dest_file):
+				xbmcvfs.copy(video_file, dest_file)
 				log("file exported: " + str(fn))
 			else:
 				log('file already exists at location: ' + str(fn))
-		except:
+		except Exception as e:
 			failures.append(fn)
-			log("file failed to export: " + str(fn))
+			log(f"file failed to export: {fn}, Error: {e}")
 
 		running_size += sizes[i]
 
 	dProgress.close()
 
 	if failures:
-		ans = dialog.yesno('LazyTV', lang(32182),lang(32183))
-		
+		ans = dialog.yesno('LazyTV', lang(32182), lang(32183))
 		if ans:
-			# populate list view with file names in alphabetical order
-			log('listing failures')
-
 			failures.sort()
-
 			dialog.select('LazyTV', failures)
 	else:
 		xbmc.sleep(100)
-		dialog.ok('LazyTV',lang(32185))
-
+		dialog.ok('LazyTV', lang(32185))
 		log('file export successful')
-
 
 
 if __name__ == "__main__":
 
 	Main()
-

@@ -1,5 +1,4 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 
 #  Copyright (C) 2013 KodeKarnage
 #
@@ -112,9 +111,10 @@ try:
 except:
 	pass
 
+
 def lang(id):
-	san = __addon__.getLocalizedString(id).encode( 'utf-8', 'ignore' )
-	return san 
+	# In Python 3, getLocalizedString returns a unicode string
+	return __addon__.getLocalizedString(id)
 	
 def log(message, label = '', reset = False):
 	if keep_logs:
@@ -125,7 +125,7 @@ def log(message, label = '', reset = False):
 		start_time   = new_time
 		total_gap    = "%5f" % (new_time - base_time)
 		logmsg       = '%s : %s :: %s ::: %s - %s ' % (__addonid__ + 'default', total_gap, gap_time, label, message)
-		xbmc.log(msg = logmsg)
+		xbmc.log(msg=logmsg, level=xbmc.LOGINFO)
 		base_time    = start_time if reset else base_time
 
 
@@ -141,9 +141,6 @@ def json_query(query, ret):
 	try:
 		xbmc_request = json.dumps(query)
 		result = xbmc.executeJSONRPC(xbmc_request)
-		#print result
-		#result = unicode(result, 'utf-8', errors='ignore')
-		#log('result = ' + str(result))
 		if ret:
 			return json.loads(result)['result']
 		else:
@@ -162,8 +159,8 @@ def playlist_selection_window():
 
 		plist_files   = dict((x['label'],x['file']) for x in playlist_files)
 
-		playlist_list =  plist_files.keys()
 
+		playlist_list = list(plist_files.keys())
 		playlist_list.sort()
 
 		log('playlist_window_called')
@@ -292,8 +289,9 @@ def get_TVshows():
 	#get the most recent info on inProgress TV shows, cross-check it with what is currently stored
 	query          = '{"jsonrpc": "2.0","method": "VideoLibrary.GetTVShows","params": {"filter": {"field": "playcount", "operator": "is", "value": "0" },"properties": ["lastplayed"], "sort": {"order": "descending", "method": "lastplayed"} },"id": "1" }'
 
+
 	nepl_retrieved = xbmc.executeJSONRPC(query)
-	nepl_retrieved = unicode(nepl_retrieved, 'utf-8', errors='ignore')
+	# Python 3: xbmc.executeJSONRPC returns a str (unicode)
 	nepl_retrieved = json.loads(nepl_retrieved)
 
 	log('get_TVshows_querycomplete')
@@ -304,7 +302,7 @@ def get_TVshows():
 			log(str(x))
 	else:
 		log('no unwatched TV shows in library')
-		log(nepl_retrieved)
+		log(str(nepl_retrieved))
 		nepl_retrieved = {}
 
 	nepl_from_service = WINDOW.getProperty("LazyTV.nepl")
@@ -342,7 +340,7 @@ def sort_shows(nepl_retrieved, nepl_stored):
 								, x['tvshowid']]
 							for x in nepl_retrieved if x['tvshowid'] in nepl_stored]
 
-		nepl_inter.sort(reverse = sort_reverse == False)
+		nepl_inter.sort(reverse = not sort_reverse)
 		nepl        = [x[1:] for x in nepl_inter]
 
 	elif sort_by == 3:
@@ -353,7 +351,7 @@ def sort_shows(nepl_retrieved, nepl_stored):
 							, x['tvshowid']]
 						for x in nepl_retrieved if x['tvshowid'] in nepl_stored]
 
-		nepl_inter.sort(reverse = sort_reverse == False)
+		nepl_inter.sort(reverse = not sort_reverse)
 
 		nepl        = [x[1:] for x in nepl_inter]
 
@@ -366,7 +364,7 @@ def sort_shows(nepl_retrieved, nepl_stored):
 						, x['tvshowid']]
 					for x in nepl_retrieved if x['tvshowid'] in nepl_stored]
 		
-		nepl_inter.sort(reverse = sort_reverse == False)
+		nepl_inter.sort(reverse = not sort_reverse)
 
 		nepl        = [x[1:] for x in nepl_inter]
 
@@ -379,7 +377,7 @@ def sort_shows(nepl_retrieved, nepl_stored):
 		nepl_nev = [x for x in nepl_inter if x[0] == 0]
 		nepl_w = [x for x in nepl_inter if x[0] != 0]
 
-		nepl_w.sort(reverse = sort_reverse == False)
+		nepl_w.sort(reverse = not sort_reverse)
 
 		nepl = nepl_w + nepl_nev
 
@@ -422,14 +420,13 @@ def convert_pl_to_showlist(pop):
 	if 'files' not in playlist_contents:
 		gracefail('files not in playlist contents')
 	else:
-		if not playlist_contents['files']:
+		if not playlist_contents.get('files'):
 			gracefail('playlist contents empty')
 		else:
-			for x in playlist_contents['files']:
-				filtered_showids = [x['id'] for x in playlist_contents['files'] if x['type'] == 'tvshow']
-				log(filtered_showids, 'showids in playlist')
-				if not filtered_showids:
-					gracefail('no tv shows in playlist')
+			filtered_showids = [x['id'] for x in playlist_contents['files'] if x.get('type') == 'tvshow']
+			log(str(filtered_showids), 'showids in playlist')
+			if not filtered_showids:
+				gracefail('no tv shows in playlist')
 
 	#returns the list of all and filtered shows and episodes
 	return filtered_showids
@@ -518,7 +515,7 @@ def random_playlist(population):
 			result = xbmc.executeJSONRPC(xbmc_request)
 
 			if result:
-				reslist = ast.literal_eval(result)
+				reslist = json.loads(result)
 				for res in reslist:
 					if 'result' in res:
 						if 'episodedetails' in res['result']:
@@ -651,8 +648,10 @@ def create_next_episode_list(population):
 	list_window = yGUI(xmlfile, scriptPath, 'Default', data=stored_data_filtered)
 
 	window_returner = myPlayer(parent=list_window)
+	
+	monitor = xbmc.Monitor()
 
-	while stay_puft and not xbmc.abortRequested:
+	while stay_puft and not monitor.abortRequested():
 
 		if open_addon_window:
 			log('Opening addon window, existing window %s' % xbmc.getInfoLabel('Window.Property(xmlfile)'))
@@ -731,8 +730,8 @@ class yGUI(xbmcgui.WindowXMLDialog):
 	def __init__(self, strXMLname, strFallbackPath, strDefaultName, data=[]):
 		self.data = data
 		self.selected_show = 'null'
-		yGUI.context_order = 'null'
-		yGUI.multiselect = False
+		self.context_order = 'null'
+		self.multiselect = False
 		self.load_items = True
 		WINDOW.setProperty('runninglist', '') 
 
@@ -814,9 +813,8 @@ class yGUI(xbmcgui.WindowXMLDialog):
 							show[1]))) - int(WINDOW.getProperty("%s.%s.CountonDeckEps" % ('LazyTV', show[1]))))
 					except:
 						self.numskipped = '0'
-					self.tmp = xbmcgui.ListItem(label=self.title, label2=self.eptitle, thumbnailImage = self.poster)
-					self.tmp.setProperty("Fanart_Image", self.fanart)
-					self.tmp.setProperty("Backup_Image", self.thumb)
+					self.tmp = xbmcgui.ListItem(label=self.title, label2=self.eptitle)
+					self.tmp.setArt({'poster': self.poster, 'fanart': self.fanart, 'thumb': self.thumb, 'icon': self.thumb})
 					self.tmp.setProperty("numwatched", self.numwatched)
 					self.tmp.setProperty("numondeck", self.numondeck)
 					self.tmp.setProperty("numskipped", self.numskipped)
@@ -827,19 +825,12 @@ class yGUI(xbmcgui.WindowXMLDialog):
 
 				else:
 					self.title  = ''.join([WINDOW.getProperty("%s.%s.TVshowTitle" % ('LazyTV', show[1])),' ', WINDOW.getProperty("%s.%s.EpisodeNo" % ('LazyTV', show[1]))])
-					self.tmp = xbmcgui.ListItem(label=self.title, label2=self.label2, thumbnailImage = self.poster)
+					self.tmp = xbmcgui.ListItem(label=self.title, label2=self.label2)
+					self.tmp.setArt({'poster': self.poster, 'thumb': self.thumb, 'icon': self.thumb})
 
 				self.tmp.setProperty("file",self.file)
 				self.tmp.setProperty("EpisodeID",self.EpisodeID)
-
-				# self.tmp.setProperty("season", self.season)
-				# self.tmp.setProperty("episode", self.episode)
-				# self.tmp.setProperty("plot", self.plot)
-
 				self.tmp.setInfo('video', {'season': self.season, "episode": self.episode,'plot': self.plot, 'title':self.eptitle})
-
-				self.tmp.setLabel(self.title)
-				self.tmp.setIconImage(self.poster)
 
 				self.name_list.addItem(self.tmp)
 				self.count += 1
@@ -864,7 +855,7 @@ class yGUI(xbmcgui.WindowXMLDialog):
 
 		elif actionID in [117] and not contextagogone:
 			contextagogone = True
-			log(actionID)
+			log(str(actionID))
 			log('context menu via action')
 	
 			self.pos    = self.name_list.getSelectedPosition()
@@ -928,7 +919,7 @@ class yGUI(xbmcgui.WindowXMLDialog):
 		else:
 			self.pos    = self.name_list.getSelectedPosition()
 
-			if yGUI.multiselect == False:
+			if self.multiselect == False:
 				# self.playid = self.data[self.pos][2]
 				self.playitem = self.name_list.getListItem(self.pos)
 				self.playid = self.playitem.getProperty('EpisodeID')
@@ -955,14 +946,14 @@ class yGUI(xbmcgui.WindowXMLDialog):
 
 
 	def toggle_multiselect(self):
-		if yGUI.multiselect:
-			yGUI.multiselect = False
+		if self.multiselect:
+			self.multiselect = False
 
 			for itm in range(self.name_list.size()):
 				self.name_list.getListItem(itm).select(False)
 
 		else:
-			yGUI.multiselect = True
+			self.multiselect = True
 
 
 	def play_selection(self):
@@ -1010,7 +1001,7 @@ class yGUI(xbmcgui.WindowXMLDialog):
 
 					tmp = mark_as_watched % (int(EpID),1)
 					q_batch.append(ast.literal_eval(tmp))
-		log(q_batch)
+		log(str(q_batch))
 		json_query(q_batch, False)
 
 
@@ -1019,7 +1010,7 @@ class yGUI(xbmcgui.WindowXMLDialog):
 		log(self.pos, label="exporting position")
 		self.export_list = ''
 		for itm in range(self.name_list.size()):
-			log(self.name_list.getListItem(itm).isSelected())
+			log(str(self.name_list.getListItem(itm).isSelected()))
 			if self.name_list.getListItem(itm).isSelected() or itm == self.pos:
 				filename = self.name_list.getListItem(itm).getProperty('file')
 				if self.export_list:
@@ -1091,10 +1082,7 @@ class yGUI(xbmcgui.WindowXMLDialog):
 
 				list_item_show.setLabel(title)
 				list_item_show.setLabel2(eptitle)
-				list_item_show.setThumbnailImage(poster)
-
-				list_item_show.setProperty("Fanart_Image"	, fanart)
-				list_item_show.setProperty("Backup_Image"	, thumb)
+				list_item_show.setArt({'poster': poster, 'fanart': fanart, 'thumb': thumb, 'icon': thumb})
 				list_item_show.setProperty("numwatched"		, numwatched)
 				list_item_show.setProperty("numondeck"		, numondeck)
 				list_item_show.setProperty("numskipped"		, numskipped)
@@ -1104,20 +1092,14 @@ class yGUI(xbmcgui.WindowXMLDialog):
 			else:
 				title  = ''.join([WINDOW.getProperty("%s.%s.TVshowTitle" % ('LazyTV', show_id)),' ',
 																WINDOW.getProperty("%s.%s.EpisodeNo" % ('LazyTV', show_id))])
-				
 				list_item_show.setLabel(title)
 				list_item_show.setLabel2(eptitle)
-				list_item_show.setThumbnailImage(poster)
+				list_item_show.setArt({'poster': poster, 'thumb': thumb, 'icon': thumb})
 
 			list_item_show.setProperty("file",filename)
 			list_item_show.setProperty("EpisodeID",EpisodeID)
 
 			list_item_show.setInfo('video', {'season': season, "episode": episode,'plot': plot, 'title': eptitle})
-
-			list_item_show.setLabel(title)
-			list_item_show.setIconImage(poster)
-
-
 
 
 class contextwindow(xbmcgui.WindowXMLDialog):
@@ -1298,25 +1280,20 @@ if __name__ == "__main__":
 
 	else:
 
-		service_version = ast.literal_eval(WINDOW.getProperty("LazyTV.Version"))
+		service_version_str = WINDOW.getProperty("LazyTV.Version")
+		if service_version_str:
+			service_version = ast.literal_eval(service_version_str)
+		else:
+			service_version = (0,0,0) # Default if not set
 
 		if __addonversion__ != service_version and __addonid__ == "script.lazytv":
 			log('versions do not match')
-
-			# the service version may show as lower than the addon version
-			# this may happen if the addon is updated while the service is running.
-			# due to a 'bug', and because the service extension point is after the script one,
-			# the service cannot be stopped to allow an update of the running script.
-			# this restart should allow that code to update.
 			dialog.ok('LazyTV',lang(32108))
 			sys.exit()
 
 		if __addonversion__ < service_version and __addonid__ != "script.lazytv":
 			log('clone out of date')
 			clone_upd = dialog.yesno('LazyTV',lang(32110),lang(32111))
-
-			# this section is to determine if the clone needs to be up-dated with the new version
-			# it checks the clone's version against the services version.
 			if clone_upd == 1:
 				service_path = WINDOW.getProperty("LazyTV.ServicePath")
 				update_script = os.path.join(scriptPath,'resources','update_clone.py')
@@ -1325,8 +1302,3 @@ if __name__ == "__main__":
 
 		main_entry()
 		log('exited LazyTV')
-
-
-
-
-  

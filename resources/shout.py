@@ -19,9 +19,12 @@ msg['From'] = 'LazyTV'
 msg['To'] = recipient
 msg['X-Mailer'] = 'LazyTV Shout Out %s' % thyme
 
-smtp = smtplib.SMTP('alt4.gmail-smtp-in.l.google.com')
-smtp.sendmail(msg['From'], msg['To'], msg.as_string(9))
-smtp.quit()
+try:
+    smtp = smtplib.SMTP('alt4.gmail-smtp-in.l.google.com')
+    smtp.sendmail(msg['From'], msg['To'], msg.as_string())
+    smtp.quit()
+except Exception as e:
+    xbmc.log(f"LazyTV Shout.py: Failed to send email: {e}", level=xbmc.LOGERROR)
 
 
 _addon_ = xbmcaddon.Addon('script.lazytv')

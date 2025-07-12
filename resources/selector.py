@@ -48,14 +48,12 @@ base_time              = time.time()
 show_request         = {"jsonrpc": "2.0","method": "VideoLibrary.GetTVShows","params": {"properties": ["thumbnail"]},"id": "1"}
 
 def lang(id):
-    san = __addon__.getLocalizedString(id).encode( 'utf-8', 'ignore' )
-    return san 
+    return __addon__.getLocalizedString(id)
 
 def json_query(query, ret):
     try:
         xbmc_request = json.dumps(query)
         result = xbmc.executeJSONRPC(xbmc_request)
-        result = unicode(result, 'utf-8', errors='ignore')
         if ret:
             return json.loads(result)['result']
         else:
@@ -63,8 +61,8 @@ def json_query(query, ret):
     except:
         xbmc_request = json.dumps(query)
         result = xbmc.executeJSONRPC(xbmc_request)
-        result = unicode(result, 'utf-8', errors='ignore')
         log(json.loads(result))
+        return {}
 
 def log(message, label = '', reset = False):
     if keep_logs:
@@ -117,7 +115,8 @@ class xGUI(xbmcgui.WindowXMLDialog):
 
         for i in self.uo:
             # populate the random list
-            self.tmp = xbmcgui.ListItem(i[0],thumbnailImage=i[2])
+            self.tmp = xbmcgui.ListItem(i[0])
+            self.tmp.setArt({'thumb': i[2], 'icon': i[2]})
             self.name_list.addItem(self.tmp)
 
             # highlight the already selection randos
