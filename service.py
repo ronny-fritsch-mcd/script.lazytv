@@ -268,7 +268,7 @@ class LazyPlayer(xbmc.Player):
 
 				log(f"prevcheck: {prevcheck}")
 
-				if prevcheck and show_npid and show_npid not in randos and self.pl_running != 'true':
+				if prevcheck and show_npid and show_npid not in randos and self.pl_running not in ['true', 'listview']:
 					log('Passed prevcheck')
 					odlist_str = WINDOW.getProperty(f"LazyTV.{show_npid}.odlist")
 					odlist = ast.literal_eval(odlist_str) if odlist_str else []
